@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
   output   = "../src/generated/prisma"
@@ -12,16 +6,6 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
-}
-model User {
-  id       Int       @id @default(autoincrement())
-  name     String
-  email    String    @unique
-  password String
-
-  // Relations
-  comments Comment[]
-  likes    Like[]
 }
 
 model Comment {
@@ -32,25 +16,22 @@ model Comment {
 
   // Self-relation for nested comments
   parentId  Int?
-  parent    Comment?   @relation("CommentToChildren", fields: [parentId], references: [id])
+  parent    Comment?   @relation("CommentToChildren", fields: [parentId], references: [id], onDelete: Cascade)
   children  Comment[]  @relation("CommentToChildren")
 
-  // Relation with User (author)
-  authorId  Int
-  author    User       @relation(fields: [authorId], references: [id])
+  // Clerk user details
+  authorId  String      // Clerk user id (string)
+  author    String?     // Clerk username or name
 
-  // Users who liked this comment
   likedBy   Like[]
 }
 
-// Join table for "likes" (who liked which comment)
 model Like {
   id        Int      @id @default(autoincrement())
-  userId    Int
+  userId    String    // Clerk user ID
   commentId Int
 
-  user      User     @relation(fields: [userId], references: [id])
-  comment   Comment  @relation(fields: [commentId], references: [id])
+  comment   Comment   @relation(fields: [commentId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, commentId]) // one like per user per comment
+  @@unique([userId, commentId])
 }

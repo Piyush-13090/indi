@@ -1,10 +1,13 @@
 "use client";
 
-import { CornerRightUp } from "lucide-react";
-import { useState, useEffect } from "react";
+import { Send } from "lucide-react";
+import React, { useState, useEffect } from "react";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { postComment } from "@/lib/functions";
 import { useAutoResizeTextarea } from "@/hooks/use-auto-resize-textarea";
+import { useUser } from "@clerk/nextjs";
+import { motion, AnimatePresence } from "framer-motion";
 
 interface AIInputWithLoadingProps {
   id?: string;
@@ -13,36 +16,35 @@ interface AIInputWithLoadingProps {
   maxHeight?: number;
   loadingDuration?: number;
   thinkingDuration?: number;
-  onSubmit?: (value: string) => void | Promise<void>;
   className?: string;
   autoAnimate?: boolean;
+  onCommentAdded?: () => void;
 }
 
 export function AIInputWithLoading({
   id = "ai-input-with-loading",
-  placeholder = "Comment here",
+  placeholder = "Share your thoughts...",
   minHeight = 56,
   maxHeight = 200,
   loadingDuration = 3000,
   thinkingDuration = 1000,
-  onSubmit,
   className,
-  autoAnimate = false
+  autoAnimate = false,
+  onCommentAdded
 }: AIInputWithLoadingProps) {
   const [inputValue, setInputValue] = useState("");
   const [submitted, setSubmitted] = useState(autoAnimate);
-  const [isAnimating, setIsAnimating] = useState(autoAnimate);
+  const {isLoaded,isSignedIn, user} = useUser();
   
   const { textareaRef, adjustHeight } = useAutoResizeTextarea({
     minHeight,
     maxHeight,
   });
-
   useEffect(() => {
     let timeoutId: NodeJS.Timeout;
 
     const runAnimation = () => {
-      if (!isAnimating) return;
+      if (!autoAnimate) return;
       setSubmitted(true);
       timeoutId = setTimeout(() => {
         setSubmitted(false);
@@ -50,82 +52,134 @@ export function AIInputWithLoading({
       }, loadingDuration);
     };
 
-    if (isAnimating) {
+    if (autoAnimate) {
       runAnimation();
     }
 
     return () => clearTimeout(timeoutId);
-  }, [isAnimating, loadingDuration, thinkingDuration]);
+  }, [autoAnimate, loadingDuration, thinkingDuration]);
 
-  const handleSubmit = async () => {
-    if (!inputValue.trim() || submitted) return;
-    
+  const handleSubmit = async (
+  e: React.FormEvent<HTMLFormElement> | React.MouseEvent<HTMLButtonElement> | React.KeyboardEvent<HTMLTextAreaElement>
+) => {
+  e.preventDefault();
+
+  if (!inputValue.trim() || submitted) return;
+
+  if (!isLoaded || !isSignedIn) {
+    return;
+  }
+
+  try {
     setSubmitted(true);
-    await onSubmit?.(inputValue);
-    setInputValue("");
-    adjustHeight(true);
-    
-    setTimeout(() => {
-      setSubmitted(false);
-    }, loadingDuration);
-  };
+    const submission = await postComment({
+      user: {
+        id: user.id,
+        fullName: user.fullName ?? "Anonymous",
+      },
+      content: inputValue,
+    });
+
+    if (submission?.success === true) {
+      setInputValue("");
+      onCommentAdded?.();
+    }
+  } catch (err) {
+    console.error("Error posting comment:", err);
+  } finally {
+    setTimeout(() => setSubmitted(false), 1000);
+  }
+};
+
+
+
 
   return (
-    <div className={cn("w-full py-4", className)}>
-      <div className="relative max-w-xl w-full mx-auto flex items-start flex-col gap-2">
-        <div className="relative max-w-xl w-full mx-auto">
-          <Textarea
-            id={id}
-            placeholder={placeholder}
-            className={cn(
-              "max-w-xl bg-black/5 dark:bg-white/5 w-full rounded-3xl pl-6 pr-10 py-4",
-              "placeholder:text-black/70 dark:placeholder:text-white/70",
-              "border-none ring-black/30 dark:ring-white/30",
-              "text-black dark:text-white resize-none text-wrap leading-[1.2]",
-              `min-h-[${minHeight}px]`
-            )}
-            ref={textareaRef}
-            value={inputValue}
-            onChange={(e) => {
-              setInputValue(e.target.value);
-              adjustHeight();
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                handleSubmit();
-              }
-            }}
-            disabled={submitted}
-          />
-          <button
-            onClick={handleSubmit}
-            className={cn(
-              "absolute right-3 top-1/2 -translate-y-1/2 rounded-xl py-1 px-1",
-              submitted ? "bg-none" : "bg-black/5 dark:bg-white/5"
-            )}
-            type="button"
-            disabled={submitted}
+    <motion.div 
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5 }}
+      className={cn("w-full py-6", className)}
+    >
+      <div className="relative max-w-2xl w-full mx-auto flex items-start flex-col gap-3">
+        <div className="relative max-w-2xl w-full mx-auto">
+          <motion.div
+            className="relative"
           >
-            {submitted ? (
-              <div
-                className="w-4 h-4 bg-black dark:bg-white rounded-sm animate-spin transition duration-700"
-                style={{ animationDuration: "3s" }}
-              />
-            ) : (
-              <CornerRightUp
-                className={cn(
-                  "w-4 h-4 transition-opacity dark:text-white",
-                  inputValue ? "opacity-100" : "opacity-30"
+            <Textarea
+              id={id}
+              placeholder={placeholder}
+              className={cn(
+                "w-full rounded-2xl pl-6 pr-12 py-4",
+                "backdrop-blur-xl bg-white/70 dark:bg-black/40",
+                "border border-white/20 dark:border-white/10",
+                "placeholder:text-gray-500 dark:placeholder:text-gray-400",
+                "text-gray-900 dark:text-gray-100 resize-none text-wrap leading-relaxed",
+                "focus:ring-2 focus:ring-gray-400 focus:border-transparent",
+                "shadow-lg hover:shadow-xl transition-all duration-300",
+                `min-h-[${minHeight}px]`
+              )}
+              ref={textareaRef}
+              value={inputValue}
+              onChange={(e) => {
+                setInputValue(e.target.value);
+                adjustHeight();
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSubmit(e);
+                }
+              }}
+              disabled={submitted}
+            />
+            <motion.button
+              whileTap={{ scale: 0.9 }}
+              onClick={(e) => handleSubmit(e)}
+              className={cn(
+                "absolute right-3 top-1/2 -translate-y-1/2 rounded-xl p-2",
+                "transition-all duration-200 backdrop-blur-sm",
+                submitted 
+                  ? "bg-gray-100/80 dark:bg-gray-800/50" 
+                  : inputValue.trim()
+                    ? "bg-gray-800 hover:bg-gray-700 text-white shadow-lg"
+                    : "bg-white/50 dark:bg-black/30 text-gray-400"
+              )}
+              type="button"
+              disabled={submitted || !inputValue.trim()}
+            >
+              <AnimatePresence mode="wait">
+                {submitted ? (
+                  <motion.div
+                    key="loading"
+                    initial={{ opacity: 0, rotate: -180 }}
+                    animate={{ opacity: 1, rotate: 0 }}
+                    exit={{ opacity: 0, rotate: 180 }}
+                    transition={{ duration: 0.2 }}
+                    className="w-4 h-4 border-2 border-gray-600 border-t-transparent rounded-full animate-spin"
+                  />
+                ) : (
+                  <motion.div
+                    key="send"
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.8 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <Send className="w-4 h-4" />
+                  </motion.div>
                 )}
-              />
-            )}
-          </button>
+              </AnimatePresence>
+            </motion.button>
+          </motion.div>
         </div>
-        <p className="pl-4 h-4 text-xs mx-auto text-black/70 dark:text-white/70">
-          {submitted ? "Loading" : "Let's Comment!"}
-        </p>
+        <motion.p 
+          animate={{ opacity: submitted ? 0.5 : 1 }}
+          className="pl-4 h-4 text-xs mx-auto text-gray-500 dark:text-gray-400"
+        >
+          {submitted ? "Posting your comment..." : "Type something.."}
+        </motion.p>
       </div>
-    </div>
+    </motion.div>
   );
 }

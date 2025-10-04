@@ -1,31 +1,56 @@
 import { NextRequest } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient } from "../../../generated/prisma";
 
 const prisma = new PrismaClient();
-export async function GET(req:NextRequest){
-    try{
-        const comment = await prisma.comment.findMany({})
-        return new Response(JSON.stringify(comment), {status: 200});
-    }catch(err){
-        return new Response("Failed to fetch comments", {status: 500});
-    }
+
+export async function GET() {
+  try {
+    const comments = await prisma.comment.findMany({
+      where: {
+        parentId: null, // Only top-level comments
+      },
+      include: {
+        children: {
+          include: {
+            children: {
+              include: {
+                children: true, // Support up to 3 levels of nesting
+              },
+            },
+          },
+        },
+      },
+      orderBy: { timestamp: "desc" },
+    });
+    console.log("Fetched comments:", comments);
+    return new Response(JSON.stringify(comments), { status: 200 });
+  } catch (err) {
+    console.error("Error fetching comments:", err);
+    return new Response("Failed to fetch comments", { status: 500 });
+  }
 }
 
-export async funtion Post(req:NextRequest){
-    try{
-        const {content, authorId, parentId} = await req.json();
-        if(!content || !authorId){
-            return new Response("Content and AuthorId are required", {status: 400});
-        }
-        const newComment = await prisma.comment.create({
-            data: {
-                content,
-                authorId,
-                parentId
-            }
-        });
-        return new Response(JSON.stringify(newComment), {status: 201});
-    }catch(err){
-        return new Response("Failed to post comment", {status: 500});
+export async function POST(req: NextRequest) {
+  try {
+    const { text, authorId, parentId,author } = await req.json();
+
+    if (!text || !authorId) {
+      return new Response("Text and authorId are required", { status: 400 });
     }
+
+    const newComment = await prisma.comment.create({
+      data: {
+        text,
+        authorId,
+        parentId,
+        author
+      },
+    });
+
+    console.log("✅ New comment created:", newComment);
+    return new Response(JSON.stringify(newComment), { status: 201 });
+  } catch (err) {
+    console.error("Error posting comment:", err);
+    return new Response("Failed to post comment", { status: 500 });
+  }
 }
