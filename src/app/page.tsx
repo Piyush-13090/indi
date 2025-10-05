@@ -10,7 +10,6 @@ import { Comment } from "@/lib/types";
 import { motion, AnimatePresence } from "framer-motion";
 import { MessageCircle, GitBranch, Sparkles } from "lucide-react";
 import { SignInButton } from '@clerk/nextjs';
-// import { motion } from 'framer-motion';
 
 export default function Home() {
   const [comments, setComments] = useState<Comment[]>([]);

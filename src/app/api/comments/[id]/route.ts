@@ -5,11 +5,12 @@ const prisma = new PrismaClient();
 
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { userId } = await req.json();
-    const commentId = parseInt(params.id);
+    const { id } = await params;
+    const commentId = parseInt(id);
 
     if (!userId) {
       return new Response("User ID is required", { status: 400 });
