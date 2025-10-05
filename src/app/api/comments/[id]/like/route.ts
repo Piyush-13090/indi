@@ -5,10 +5,10 @@ const prisma = new PrismaClient();
 
 export async function POST(
   req: NextRequest,
-  context: { params: Promise<{ id: string }> }
-) {
+  { params }: { params: Promise<{ id: string }> }
+): Promise<Response> {
   try {
-    const { id } = await context.params; // 👈 await the params promise
+    const { id } = await params;
     const commentId = parseInt(id);
     const { userId } = await req.json();
 
