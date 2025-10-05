@@ -5,11 +5,12 @@ const prisma = new PrismaClient();
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await context.params; // 👈 await the params promise
+    const commentId = parseInt(id);
     const { userId } = await req.json();
-    const commentId = parseInt(params.id);
 
     if (!userId) {
       return new Response("User ID is required", { status: 400 });
@@ -19,7 +20,6 @@ export async function POST(
       return new Response("Invalid comment ID", { status: 400 });
     }
 
-    // Check if user has already liked this comment
     const existingLike = await prisma.like.findUnique({
       where: {
         userId_commentId: {
@@ -30,53 +30,38 @@ export async function POST(
     });
 
     if (existingLike) {
-      // Unlike: remove the like and decrement count
       await prisma.like.delete({
-        where: {
-          id: existingLike.id,
-        },
+        where: { id: existingLike.id },
       });
 
       await prisma.comment.update({
         where: { id: commentId },
-        data: {
-          likes: {
-            decrement: 1,
-          },
-        },
+        data: { likes: { decrement: 1 } },
       });
 
       return new Response(
-        JSON.stringify({ 
-          success: true, 
-          action: "unliked", 
-          likes: await getUpdatedLikesCount(commentId) 
+        JSON.stringify({
+          success: true,
+          action: "unliked",
+          likes: await getUpdatedLikesCount(commentId),
         }),
         { status: 200 }
       );
     } else {
-      // Like: add the like and increment count
       await prisma.like.create({
-        data: {
-          userId,
-          commentId,
-        },
+        data: { userId, commentId },
       });
 
       await prisma.comment.update({
         where: { id: commentId },
-        data: {
-          likes: {
-            increment: 1,
-          },
-        },
+        data: { likes: { increment: 1 } },
       });
 
       return new Response(
-        JSON.stringify({ 
-          success: true, 
-          action: "liked", 
-          likes: await getUpdatedLikesCount(commentId) 
+        JSON.stringify({
+          success: true,
+          action: "liked",
+          likes: await getUpdatedLikesCount(commentId),
         }),
         { status: 200 }
       );
